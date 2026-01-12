@@ -169,49 +169,28 @@ th {
     <div v-if="error" class="error">{{ error }}</div>
 
     <div class="table-container" v-if="!loading && !error">
-      <h2>Filter by Username</h2>
+      <h2>Login Attempts</h2>
       <div class="table-controls">
-        <input type="text" v-model="usernameSearch" placeholder="Search usernames...">
-        <button @click="selectAllUsernames">Select All</button>
-        <button @click="selectNoneUsernames">Select None</button>
+        <input type="text" v-model="globalSearch" placeholder="Search across all fields...">
       </div>
       <div class="table-wrapper">
         <table>
           <thead>
             <tr>
-              <th></th>
-              <th>Username</th>
+              <th><input type="checkbox" @click="toggleSelectAll" :checked="allAttemptsSelected"></th>
+              <th @click="sortBy('username')">Username ↕️</th>
+              <th @click="sortBy('password')">Password ↕️</th>
+              <th @click="sortBy('ip')">IP Address ↕️</th>
+              <th @click="sortBy('time')">Time ↕️</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="username in filteredUsernames" :key="username">
-              <td><input type="checkbox" :value="username" v-model="selectedUsernames"></td>
-              <td>{{ username }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="table-container" v-if="!loading && !error">
-      <h2>Filter by Password</h2>
-      <div class="table-controls">
-        <input type="text" v-model="passwordSearch" placeholder="Search passwords...">
-        <button @click="selectAllPasswords">Select All</button>
-        <button @click="selectNonePasswords">Select None</button>
-      </div>
-      <div class="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th></th>
-              <th>Password</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="password in filteredPasswords" :key="password">
-              <td><input type="checkbox" :value="password" v-model="selectedPasswords"></td>
-              <td>{{ password }}</td>
+            <tr v-for="(attempt, index) in sortedAndFilteredAttempts" :key="index">
+              <td><input type="checkbox" :value="attempt" v-model="selectedAttempts"></td>
+              <td>{{ attempt.username }}</td>
+              <td>{{ attempt.password }}</td>
+              <td>{{ attempt.ip }}</td>
+              <td>{{ new Date(attempt.time).toLocaleString() }}</td>
             </tr>
           </tbody>
         </table>
@@ -244,62 +223,72 @@ new Vue({
     error: null,
     filters: { from: '2025-01-01', to: '2027-01-10' },
     charts: {},
-    usernameSearch: '',
-    allUsernames: [],
-    selectedUsernames: [],
-    passwordSearch: '',
-    allPasswords: [],
-    selectedPasswords: []
+    globalSearch: '',
+    sortKey: 'time',
+    sortOrder: 'desc',
+    selectedAttempts: []
   },
   computed: {
-    filteredUsernames() {
-      return this.allUsernames.filter(u => u.toLowerCase().includes(this.usernameSearch.toLowerCase()));
-    },
-    filteredPasswords() {
-      return this.allPasswords.filter(p => p.toLowerCase().includes(this.passwordSearch.toLowerCase()));
-    },
-    filteredAttempts() {
-      if (this.selectedUsernames.length === 0 || this.selectedPasswords.length === 0) {
-        return [];
+    sortedAndFilteredAttempts() {
+      let filtered = this.attempts;
+      if (this.globalSearch) {
+        const searchTerm = this.globalSearch.toLowerCase();
+        filtered = filtered.filter(attempt => {
+          return Object.values(attempt).some(value =>
+            String(value).toLowerCase().includes(searchTerm)
+          );
+        });
       }
-      const selectedUsernameSet = new Set(this.selectedUsernames);
-      const selectedPasswordSet = new Set(this.selectedPasswords);
-      return this.attempts.filter(a => selectedUsernameSet.has(a.username) && selectedPasswordSet.has(a.password));
+      return filtered.sort((a, b) => {
+        let result = 0;
+        if (a[this.sortKey] < b[this.sortKey]) {
+          result = -1;
+        } else if (a[this.sortKey] > b[this.sortKey]) {
+          result = 1;
+        }
+        return this.sortOrder === 'asc' ? result : -result;
+      });
     },
     topUsernames() {
-      return Object.entries(this.filteredAttempts.reduce((a, x) => (a[x.username] = (a[x.username]||0)+1, a), {}))
+      return Object.entries(this.selectedAttempts.reduce((a, x) => (a[x.username] = (a[x.username]||0)+1, a), {}))
                    .sort((a,b)=>b[1]-a[1]).slice(0,10);
     },
     topPasswords() {
-      return Object.entries(this.filteredAttempts.reduce((a, x) => (a[x.password] = (a[x.password]||0)+1, a), {}))
+      return Object.entries(this.selectedAttempts.reduce((a, x) => (a[x.password] = (a[x.password]||0)+1, a), {}))
                    .sort((a,b)=>b[1]-a[1]).slice(0,10);
     },
     topCombos() {
-      return Object.entries(this.filteredAttempts.reduce((a, x) => {
+      return Object.entries(this.selectedAttempts.reduce((a, x) => {
         const k = x.username+":"+x.password;
         a[k] = (a[k]||0)+1; return a;
       }, {})).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    },
+    allAttemptsSelected() {
+      return this.selectedAttempts.length === this.sortedAndFilteredAttempts.length && this.sortedAndFilteredAttempts.length > 0;
     }
   },
   watch: {
-    filteredAttempts() {
+    selectedAttempts() {
       if (!this.loading) {
         this.$nextTick(() => { this.initCharts(); });
       }
     }
   },
   methods: {
-    selectAllUsernames() {
-      this.selectedUsernames = [...this.allUsernames];
+    sortBy(key) {
+      if (this.sortKey === key) {
+        this.sortOrder = this.sortOrder === 'asc' ? 'desc' : 'asc';
+      } else {
+        this.sortKey = key;
+        this.sortOrder = 'asc';
+      }
     },
-    selectNoneUsernames() {
-      this.selectedUsernames = [];
-    },
-    selectAllPasswords() {
-      this.selectedPasswords = [...this.allPasswords];
-    },
-    selectNonePasswords() {
-      this.selectedPasswords = [];
+    toggleSelectAll() {
+      if (this.allAttemptsSelected) {
+        this.selectedAttempts = [];
+      } else {
+        this.selectedAttempts = [...this.sortedAndFilteredAttempts];
+      }
     },
     fetchData() {
       this.loading = true;
@@ -309,11 +298,9 @@ new Vue({
         .then(r => r.json())
         .then(data => {
           this.attempts = data.attempts;
-          this.allUsernames = [...new Set(data.attempts.map(a => a.username))].sort();
-          this.selectedUsernames = [...this.allUsernames];
-          this.allPasswords = [...new Set(data.attempts.map(a => a.password))].sort();
-          this.selectedPasswords = [...this.allPasswords];
+          this.selectedAttempts = [...this.attempts];
           this.loading = false;
+          this.$nextTick(() => { this.initCharts(); });
         })
         .catch(() => { this.error = "Failed to load data"; this.loading = false; });
     },
