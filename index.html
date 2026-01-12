@@ -141,9 +141,14 @@ table {
   border-collapse: collapse;
 }
 
-td {
+td, th {
   padding: 8px;
   border-bottom: 1px solid #333;
+}
+
+th {
+  text-align: left;
+  font-weight: bold;
 }
 </style>
 </head>
@@ -188,6 +193,31 @@ td {
       </div>
     </div>
 
+    <div class="table-container" v-if="!loading && !error">
+      <h2>Filter by Password</h2>
+      <div class="table-controls">
+        <input type="text" v-model="passwordSearch" placeholder="Search passwords...">
+        <button @click="selectAllPasswords">Select All</button>
+        <button @click="selectNonePasswords">Select None</button>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Password</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="password in filteredPasswords" :key="password">
+              <td><input type="checkbox" :value="password" v-model="selectedPasswords"></td>
+              <td>{{ password }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="dashboard" v-if="!loading && !error">
       <div class="chart-container">
         <h2>Top 10 Usernames</h2>
@@ -216,18 +246,25 @@ new Vue({
     charts: {},
     usernameSearch: '',
     allUsernames: [],
-    selectedUsernames: []
+    selectedUsernames: [],
+    passwordSearch: '',
+    allPasswords: [],
+    selectedPasswords: []
   },
   computed: {
     filteredUsernames() {
       return this.allUsernames.filter(u => u.toLowerCase().includes(this.usernameSearch.toLowerCase()));
     },
+    filteredPasswords() {
+      return this.allPasswords.filter(p => p.toLowerCase().includes(this.passwordSearch.toLowerCase()));
+    },
     filteredAttempts() {
-      if (this.selectedUsernames.length === 0) {
+      if (this.selectedUsernames.length === 0 || this.selectedPasswords.length === 0) {
         return [];
       }
-      const selectedSet = new Set(this.selectedUsernames);
-      return this.attempts.filter(a => selectedSet.has(a.username));
+      const selectedUsernameSet = new Set(this.selectedUsernames);
+      const selectedPasswordSet = new Set(this.selectedPasswords);
+      return this.attempts.filter(a => selectedUsernameSet.has(a.username) && selectedPasswordSet.has(a.password));
     },
     topUsernames() {
       return Object.entries(this.filteredAttempts.reduce((a, x) => (a[x.username] = (a[x.username]||0)+1, a), {}))
@@ -258,6 +295,12 @@ new Vue({
     selectNoneUsernames() {
       this.selectedUsernames = [];
     },
+    selectAllPasswords() {
+      this.selectedPasswords = [...this.allPasswords];
+    },
+    selectNonePasswords() {
+      this.selectedPasswords = [];
+    },
     fetchData() {
       this.loading = true;
       const from = new Date(this.filters.from + 'T00:00:00Z').toISOString();
@@ -268,6 +311,8 @@ new Vue({
           this.attempts = data.attempts;
           this.allUsernames = [...new Set(data.attempts.map(a => a.username))].sort();
           this.selectedUsernames = [...this.allUsernames];
+          this.allPasswords = [...new Set(data.attempts.map(a => a.password))].sort();
+          this.selectedPasswords = [...this.allPasswords];
           this.loading = false;
         })
         .catch(() => { this.error = "Failed to load data"; this.loading = false; });
