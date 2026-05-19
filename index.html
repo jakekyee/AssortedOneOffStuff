@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --fontcolor: #e8dede;
+            --linkcolor: #e8991a;
+            --color3: #1a73e8;
+            --bgcolor: #0d0d0d;
+            --bgcolor2: #181818;
+            --altbgcolor: hsl(49, 46%, 75%);
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--bgcolor);
+            color: var(--fontcolor);
+            margin: 0;
+            padding: 0;
+        }
+
+        h1,
+        h2 {
+            color: var(--fontcolor);
+            text-align: center;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            padding: 20px;
+        }
+
+        .filters {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filters label {
+            margin-right: 5px;
+        }
+
+        .filters input {
+            background: var(--bgcolor2);
+            border: 1px solid var(--altbgcolor);
+            color: var(--fontcolor);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+
+        .filters button {
+            background: var(--linkcolor);
+            border: none;
+            color: var(--bgcolor);
+            padding: 6px 15px;
+            margin-left: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        .filters button:hover {
+            background: var(--color3);
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .chart-container {
+            background: var(--bgcolor2);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+        }
+
+        canvas {
+            border-radius: 5px;
+        }
+
+        .loading,
+        .error {
+            text-align: center;
+            margin: 20px 0;
+            color: var(--linkcolor);
+        }
+
+        .table-container {
+            background: var(--bgcolor2);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            margin-bottom: 20px;
+        }
+
+        .table-controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .table-controls input {
+            width: 60%;
+            background: var(--bgcolor2);
+            border: 1px solid var(--altbgcolor);
+            color: var(--fontcolor);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+
+        .table-controls button {
+            background: var(--linkcolor);
+            border: none;
+            color: var(--bgcolor);
+            padding: 6px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        .table-controls button:hover {
+            background: var(--color3);
+        }
+
+        .table-wrapper {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        td,
+        th {
+            padding: 8px;
+            border-bottom: 1px solid #333;
+        }
+
+        th {
+            text-align: left;
+            font-weight: bold;
+        }
+
+        th.sortable {
+            cursor: pointer;
+        }
+
+        th.sortable:hover {
+            background-color: #333;
+        }
+
+        th.sorted-asc::after {
+            content: ' ▲';
+            font-size: 0.8em;
+        }
+
+        th.sorted-desc::after {
+            content: ' ▼';
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div class="container">
+            <h1>API Dashboard</h1>
+
+            <div class="filters">
+                <label>From:</label>
+                <input type="date" v-model="filters.from">
+                <label>To:</label>
+                <input type="date" v-model="filters.to">
+                <button @click="fetchData">Filter</button>
+            </div>
+
+            <div v-if="loading" class="loading">Loading...</div>
+            <div v-if="error" class="error">{{ error }}</div>
+
+            <div class="table-container" v-if="!loading && !error">
+                <h2>Filter by Username</h2>
+                <div class="table-controls">
+                    <input type="text" v-model="usernameSearch" placeholder="Search usernames...">
+                    <button @click="selectAllUsernames">Select All</button>
+                    <button @click="selectNoneUsernames">Select None</button>
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Username</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="username in filteredUsernames" :key="username">
+                                <td><input type="checkbox" :value="username" v-model="selectedUsernames"></td>
+                                <td>{{ username }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="table-container" v-if="!loading && !error">
+                <h2>Filter by Password</h2>
+                <div class="table-controls">
+                    <input type="text" v-model="passwordSearch" placeholder="Search passwords...">
+                    <button @click="selectAllPasswords">Select All</button>
+                    <button @click="selectNonePasswords">Select None</button>
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Password</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="password in filteredPasswords" :key="password">
+                                <td><input type="checkbox" :value="password" v-model="selectedPasswords"></td>
+                                <td>{{ password }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="dashboard" v-if="!loading && !error">
+                <div class="chart-container">
+                    <h2>Top 10 Usernames</h2>
+                    <canvas id="topUsernamesChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h2>Top 10 Passwords</h2>
+                    <canvas id="topPasswordsChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h2>Top 10 Combos</h2>
+                    <canvas id="topCombosChart"></canvas>
+                </div>
+            </div>
+
+            <div class="table-container" v-if="!loading && !error">
+                <h2>Raw Attempts</h2>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th @click="sortBy('id')" :class="{ 'sortable': true, 'sorted-asc': sortKey === 'id' && sortAsc, 'sorted-desc': sortKey === 'id' && !sortAsc }">ID</th>
+                                <th @click="sortBy('username')" :class="{ 'sortable': true, 'sorted-asc': sortKey === 'username' && sortAsc, 'sorted-desc': sortKey === 'username' && !sortAsc }">Username</th>
+                                <th @click="sortBy('password')" :class="{ 'sortable': true, 'sorted-asc': sortKey === 'password' && sortAsc, 'sorted-desc': sortKey === 'password' && !sortAsc }">Password</th>
+                                <th @click="sortBy('ip')" :class="{ 'sortable': true, 'sorted-asc': sortKey === 'ip' && sortAsc, 'sorted-desc': sortKey === 'ip' && !sortAsc }">IP</th>
+                                <th @click="sortBy('timestamp')" :class="{ 'sortable': true, 'sorted-asc': sortKey === 'timestamp' && sortAsc, 'sorted-desc': sortKey === 'timestamp' && !sortAsc }">Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="attempt in sortedAttempts" :key="attempt.id">
+                                <td>{{ attempt.id }}</td>
+                                <td>{{ attempt.username }}</td>
+                                <td>{{ attempt.password }}</td>
+                                <td>{{ attempt.ip }}</td>
+                                <td>{{ new Date(attempt.timestamp).toLocaleString() }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                attempts: [],
+                loading: true,
+                error: null,
+                filters: { from: '2025-01-01', to: '2027-01-10' },
+                charts: {},
+                usernameSearch: '',
+                allUsernames: [],
+                selectedUsernames: [],
+                passwordSearch: '',
+                allPasswords: [],
+                selectedPasswords: [],
+                sortKey: '',
+                sortAsc: true
+            },
+            computed: {
+                filteredUsernames() {
+                    return this.allUsernames.filter(u => u.toLowerCase().includes(this.usernameSearch.toLowerCase()));
+                },
+                filteredPasswords() {
+                    return this.allPasswords.filter(p => p.toLowerCase().includes(this.passwordSearch.toLowerCase()));
+                },
+                filteredAttempts() {
+                    if (this.selectedUsernames.length === 0 || this.selectedPasswords.length === 0) {
+                        return [];
+                    }
+                    const selectedUsernameSet = new Set(this.selectedUsernames);
+                    const selectedPasswordSet = new Set(this.selectedPasswords);
+                    return this.attempts.filter(a => selectedUsernameSet.has(a.username) && selectedPasswordSet.has(a.password));
+                },
+                sortedAttempts() {
+                    const sorted = [...this.filteredAttempts];
+                    if (this.sortKey) {
+                        sorted.sort((a, b) => {
+                            const valA = a[this.sortKey];
+                            const valB = b[this.sortKey];
+                            if (valA < valB) return this.sortAsc ? -1 : 1;
+                            if (valA > valB) return this.sortAsc ? 1 : -1;
+                            return 0;
+                        });
+                    }
+                    return sorted;
+                },
+                topUsernames() {
+                    return Object.entries(this.filteredAttempts.reduce((a, x) => (a[x.username] = (a[x.username] || 0) + 1, a), {}))
+                        .sort((a, b) => b[1] - a[1]).slice(0, 10);
+                },
+                topPasswords() {
+                    return Object.entries(this.filteredAttempts.reduce((a, x) => (a[x.password] = (a[x.password] || 0) + 1, a), {}))
+                        .sort((a, b) => b[1] - a[1]).slice(0, 10);
+                },
+                topCombos() {
+                    return Object.entries(this.filteredAttempts.reduce((a, x) => {
+                        const k = x.username + ":" + x.password;
+                        a[k] = (a[k] || 0) + 1; return a;
+                    }, {})).sort((a, b) => b[1] - a[1]).slice(0, 10);
+                }
+            },
+            watch: {
+                filteredAttempts() {
+                    if (!this.loading) {
+                        this.$nextTick(() => { this.initCharts(); });
+                    }
+                }
+            },
+            methods: {
+                sortBy(key) {
+                    if (this.sortKey === key) {
+                        this.sortAsc = !this.sortAsc;
+                    } else {
+                        this.sortKey = key;
+                        this.sortAsc = true;
+                    }
+                },
+                selectAllUsernames() {
+                    this.selectedUsernames = [...this.allUsernames];
+                },
+                selectNoneUsernames() {
+                    this.selectedUsernames = [];
+                },
+                selectAllPasswords() {
+                    this.selectedPasswords = [...this.allPasswords];
+                },
+                selectNonePasswords() {
+                    this.selectedPasswords = [];
+                },
+                fetchData() {
+                    this.loading = true;
+                    const from = new Date(this.filters.from + 'T00:00:00Z').toISOString();
+                    const to = new Date(this.filters.to + 'T23:59:59Z').toISOString();
+                    fetch(`https://api.jakeyee.com/attempts?from=${from}&to=${to}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            this.attempts = data.attempts;
+                            this.allUsernames = [...new Set(data.attempts.map(a => a.username))].sort();
+                            this.selectedUsernames = [...this.allUsernames];
+                            this.allPasswords = [...new Set(data.attempts.map(a => a.password))].sort();
+                            this.selectedPasswords = [...this.allPasswords];
+                            this.loading = false;
+                        })
+                        .catch(() => { this.error = "Failed to load data"; this.loading = false; });
+                },
+                initCharts() {
+                    this.createChart('topUsernamesChart', 'Top Usernames', this.topUsernames);
+                    this.createChart('topPasswordsChart', 'Top Passwords', this.topPasswords);
+                    this.createChart('topCombosChart', 'Top Combos', this.topCombos);
+                },
+                createChart(id, label, data) {
+                    if (this.charts[id]) this.charts[id].destroy();
+                    this.charts[id] = new Chart(document.getElementById(id), {
+                        type: 'bar',
+                        data: {
+                            labels: data.map(x => x[0]),
+                            datasets: [{
+                                label,
+                                data: data.map(x => x[1]),
+                                backgroundColor: 'rgba(232, 153, 26, 0.7)', // linkcolor
+                                borderColor: 'rgba(232, 153, 26, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: { labels: { color: '#e8dede' } } // fontcolor
+                            },
+                            scales: {
+                                x: { ticks: { color: '#e8dede' }, grid: { color: '#333' } },
+                                y: { beginAtZero: true, ticks: { color: '#e8dede' }, grid: { color: '#333' } }
+                            }
+                        }
+                    });
+                }
+            },
+            mounted() { this.fetchData(); }
+        });
+    </script>
+</body>
+
+</html>
